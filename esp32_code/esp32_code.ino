@@ -1,4 +1,5 @@
-#include "DHT.h" //DHT11
+
+#include <DHT.h>
 #include <ArduinoJson.h>
 // Para o protocolo MQTT
 #include <Arduino.h>
@@ -156,31 +157,26 @@ void turnLedOff(){
 
 }
 
-void setup(){
-
-  initWiFi();
-  initMQTT();
-  VerificaConexoesWiFIEMQTT();
-  timeClient.begin();
-  
-  // GMT 1 = 3600, GMT -1 = -3600
-  timeClient.setTimeOffset(-3*3600);
-  
-}
-
-void loop(){
-
-}
-
 
 class Sensor{
   int type;
   int id;
+  int active;
   Sensor(int type, int id){
     this.type = type;
     this.id = id;
-    this.curValue = curValue;
+    this.active = false;
   }
+  void activate(){
+    this.active = true;
+  }
+  void deactivate(){
+    this.active = false;
+  }
+  bool isActive(){
+    return this.active;
+  }
+
 }
 
 class DHT11: public Sensor{
@@ -212,6 +208,22 @@ class DHT11: public Sensor{
   }
 }
 
+
+void setup(){
+
+  initWiFi();
+  initMQTT();
+  VerificaConexoesWiFIEMQTT();
+  timeClient.begin();
+  
+  // GMT 1 = 3600, GMT -1 = -3600
+  timeClient.setTimeOffset(-3*3600);
+  
+}
+
+void loop(){
+
+}
 
 
 

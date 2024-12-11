@@ -1,7 +1,10 @@
-#include <DHT.h>
 #include <ArduinoJson.h>
-// Para o protocolo MQTT
 #include <Arduino.h>
+
+// Para o DHT11 - Sensor de temperatura e umidade
+#include <DHT.h>
+
+// Para o protocolo MQTT
 #include <WiFi.h>
 #include <PubSubClient.h>
 
@@ -21,7 +24,7 @@ String formattedDate;
 String dayStamp;
 String timeStamp;
 
-//PINO ANALÓGICO UTILIZADO PELO DHT11
+// Pino analógico do DHT11
 const int dhtPin = 4; 
 
 const int humMeasurements = 100, tempMeasurements = 100;
@@ -29,17 +32,22 @@ const int humMeasurements = 100, tempMeasurements = 100;
 float hum, temp, actual_hum, actual_temp; 
 
 #define ID_MQTT "cbc1a155-0db1-446a-9a10-8304c3968412"
-const char* BROKER_MQTT = "test.mosquitto.org"; //URL do broker
+const char* BROKER_MQTT = "test.mosquitto.org"; // URL do broker
 const int BROKER_PORT = 1883;
 
-WiFiClient espClient; // Cria o objeto espClient
-PubSubClient MQTT(espClient); // Instancia o Cliente MQTT passando o objeto espClient
+WiFiClient espClient;
+PubSubClient MQTT(espClient); 
 
 #define SENSORDHT11 1
 #define ACTUATORLED 2 
 #define DHTTYPE DHT11
 
 DHT dht(dhtPin, DHTTYPE);
+
+// Forward declarations
+class DevicesManager;  
+extern DevicesManager* manager;
+
 
 void initWiFi(void){
   delay(10);
@@ -134,21 +142,27 @@ class Sensor{
     bool isActive(){
       return this->active;
     }
+    int getType(){
+      return this->type;
+    }
+    String getId(){
+      return id;
+    }
 
     // método virtual, que deve ser implementado pelas especializações de Sensor
     virtual void operate() = 0;
 };
 
-class DHT11: public Sensor{
+class DHTSensor: public Sensor{
   protected:
     float temp, hum, curHum, curTemp;
-    void setJson(JsonDocument json, String id, char valueStr[]){
+    void setJson(StaticJsonDocument<256>& json, String id, char valueStr[]){
       json["sensorId"] = id;
       json["value"] = valueStr;
       json["timestamp"] = getFmtDate();
     }
   public:
-    DHT11(int type, String id) : Sensor(type, id){}
+    DHTSensor(int type, String id) : Sensor(type, id){}
     void operate(){
       // A temperatura e umidade são obtidas a partir de uma média de 100 medidas
       float sumHum = 0, sumTemp = 0;
@@ -169,7 +183,7 @@ class DHT11: public Sensor{
         char tempStr[256], humStr[256], topicStr[256];
         String topic = "/esp32/" + WiFi.macAddress() + "/sensors_data/";
         topic.toCharArray(topicStr, sizeof(topicStr));
-        JsonDocument tempJson, humJson;
+        StaticJsonDocument<256> tempJson, humJson;
         curHum = hum;
         curTemp = temp;
         Serial.println("Temperatura: " + String(temp) + "°C\tHumidade" + String(hum) + "%");
@@ -192,7 +206,8 @@ class DHT11: public Sensor{
 class Actuator{
   protected:
     String id;
-    int type, active;
+    int type;
+    bool active;
   public:
     Actuator(String id, int type){
       this->id = id;
@@ -211,6 +226,9 @@ class Actuator{
     int getType(){
       return type;
     }
+    int isActive(){
+      return active;
+    }
     void virtual turnOn() = 0;
     void virtual turnOff() = 0;
 };
@@ -224,7 +242,7 @@ class Led: public Actuator{
       pinMode(pin, OUTPUT);
     }
     Led(String id, int type) : Actuator(id, type){
-      this->pin = 9;
+      this->pin = 19;
       pinMode(pin, OUTPUT);
     }
     void turnOn(){
@@ -243,70 +261,127 @@ class Led: public Actuator{
   }
 };
 
-// instancia um novo sensor de acordo com seu tipo e o insere no array de sensores, fazendo com que ele seja operado no procedimento loop
-void addSensor(String id, int type){
-  switch (type){
-    case 1:
-      DHT11* newDHT = new DHT11(type, id);
-      newDHT->activate();
-      sensors[lastSenIndex++] = *newDHT;
-      break;
+class DevicesManager{
+  protected:
+    Sensor* sensors[256];
+    Actuator* actuators[256];
+    int lastActIndex, lastSenIndex;
     
-    default:
-      break;
-  }
-}
+  public:
 
-void addActuator(String id, int type){
-  switch (type){
-    case 2:
-      Led *newLed = new Led(id, type);
-      newLed->activate();
-      actuators[lastActIndex++] = *newLed;
-      break;
-    
-    default:
-      break;
-  }
-}
+    DevicesManager(){
+      lastActIndex = lastSenIndex = 0;
+    }
 
-// Aciona o atuador da lista de atuadores de acordo com o id e o comando passado
-void callActuator(String id, String command){
-  for(int i=0; i<lastActIndex; i++){
-    // Se for o atuador procurado e ele estiver ativo 
-    if(actuators[i] != NULL && actuators[i]->getId == id && actuators[i]->isActive()){
-      switch(actuators[i]->getType()){
-        // Se o atuador for um led, ele será acionado de acordo com o comando recebido pelo MQTT
-        case 2:
-          switch(command){
-            case "turnOn":
-              actuators[i]->turnOn();
-              break;
-            case "turnOff":
-              actuators[i]->turnOff();
-              break;
-            case "blink":
-              actuators[i]->blink(3, 1000);
-              break;
-            default:
-              break;
+    // instancia um novo sensor de acordo com seu tipo e o insere no array de sensores, fazendo com que ele seja operado no procedimento loop
+    void addSensor(String id, int type){
+      switch (type){
+        case 1:{
+          if(lastSenIndex < 256){
+            //Se já existir um sensor do mesmo tipo, o procedimento é interrompido sem adicionar o sensor
+            for(int i=0; i<lastSenIndex; i++){
+              if(sensors[i]->getType() == type){
+                return;
+              }
+            }
+            switch(type){
+              case 1:{
+                Sensor* dht = new DHTSensor(type, id);
+                dht->activate();
+                sensors[lastSenIndex++] = dht;
+                break;
+              }
+              default:
+                break; 
+            } 
           }
+          break;
+        }
         default:
           break;
       }
     }
-  }
-}
+
+    void deleteSensor(String id){
+      for(int i=0; i<lastSenIndex; i++){
+        if(sensors[i] != NULL && sensors[i]->getId().equals(id)){
+          // Se o sensor a ser deletado for encontrado, ele é removido de forma lógica
+          lastSenIndex--;
+        }
+      }
+    }
+
+    void addActuator(String id, int type){
+      switch (type){
+        case 2: {
+          Actuator* newLed = new Led(id, type);
+          newLed->activate();
+          actuators[lastActIndex++] = newLed;
+          break;
+        }  
+        default:
+          break;
+      }
+    }
+
+    // Deleta o atuador da lista de atuadores passada por parâmetro
+    void deleteActuator(String id){
+      for(int i=0; i<lastActIndex; i++){
+        if(actuators[i] != NULL && actuators[i]->getId().equals(id)){
+          // Se o atuador a ser deletado for encontrado, ele é removido de forma lógica
+          lastActIndex--;
+        }
+      }
+    }
+
+    // Aciona o atuador da lista de atuadores de acordo com o id e o comando passado
+    void callActuator(String id, String command){
+      for(int i=0; i<lastActIndex; i++){
+        // Se for o atuador procurado e ele estiver ativo 
+        if(actuators[i] != NULL && actuators[i]->getId().equals(id) && actuators[i]->isActive()){
+          switch(actuators[i]->getType()){
+            // Se o atuador for um led, ele será acionado de acordo com o comando recebido pelo MQTT
+            case 2:
+              if(command.equals("turnOn")){
+                actuators[i]->turnOn();
+              }
+              else if(command.equals("turnOff")){
+                actuators[i]->turnOff();
+              }
+              else if(command.equals("blink")){
+                Led* led = static_cast<Led*>(actuators[i]); // Faz o cast para Led
+                led->blink(3, 1000);
+              }
+            default:
+              break;
+          }
+        }
+      }
+    }
+
+    void operateAllSensors(){
+      for(int i=0; i<lastSenIndex; i++){
+        if(sensors[i] != NULL && sensors[i]->isActive()){
+          //Se o sensor estiver ativo, ele opera medindo valores e, se for o caso, os publica
+          sensors[i]->operate();
+        }
+      }
+    }
+};
 
 // função callback usada para operar sensores - na função loop - ou acionar atuadores
 void mqttCallback(char* top, byte* payload, unsigned int length){
 
-  String topic = top;
+  String topic = String(top);
   
-  if(topic.indexOf("sensors") != -1){
+  if(topic.indexOf("sensorsAdded") != -1){
     // Nesse caso, se trata da entrada de um sensor pelo usuário
-    JsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, String(payload));
+    StaticJsonDocument<256> doc;
+    // O conteúdo da mensagem é convertido de array de bytes para uma string
+    char payStr[256];
+    memcpy(payStr, payload, sizeof(payload));
+
+    DeserializationError error = deserializeJson(doc, payStr);
 
     // Verifica se houve erro no parsing
     if (error) {
@@ -318,12 +393,16 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     // Os dados são decodificados e o sensor requisitado passa a ser operado no loop
     String id = doc["sensorId"];
     int type = doc["type"];
-    addSensor(sensorId, type); 
+    manager->addSensor(id, type); 
   }
-  else if(topic.indexOf("actuators") != -1){
+  else if(topic.indexOf("actuatorsAdded") != -1){
     // Nesse caso, se trata da entrada de um atuador pelo usuário
-    JsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, String(payload));
+    StaticJsonDocument<256> doc;
+
+    char payStr[256];
+    memcpy(payStr, payload, sizeof(payload));
+
+    DeserializationError error = deserializeJson(doc, payStr);
 
     // Verifica se houve erro no parsing
     if (error) {
@@ -335,12 +414,39 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     // Os dados são decodificados e o atuador passa a poder executar comandos do usuário
     String id = doc["actuatorId"];
     int type = doc["type"];
-    addActuator(sensorId, type);
+    manager->addActuator(id, type);
   }
-  else if(topic.contains("actuator_data")){
+  else if(topic.indexOf("sensors_deleted")){
+
+    StaticJsonDocument<256> doc;
+    // O conteúdo da mensagem é convertido de array de bytes para uma string
+    char payStr[256];
+    memcpy(payStr, payload, sizeof(payload));
+
+    DeserializationError error = deserializeJson(doc, payStr);
+
+    String id = doc["sensorId"];
+    manager->deleteSensor(id);
+  }
+  else if(topic.indexOf("actuators_deleted")){
+    StaticJsonDocument<256> doc;
+    // O conteúdo da mensagem é convertido de array de bytes para uma string
+    char payStr[256];
+    memcpy(payStr, payload, sizeof(payload));
+
+    DeserializationError error = deserializeJson(doc, payStr);
+
+    String id = doc["actuatorId"];
+    manager->deleteActuator(id);
+  }
+  else if(topic.indexOf("actuator_data") != -1){
     // Nesse caso, se trata de um comando sobre o atuador pelo usuário
-    JsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, String(payload));
+    StaticJsonDocument<256> doc;
+
+    char payStr[256];
+    memcpy(payStr, payload, sizeof(payload));
+
+    DeserializationError error = deserializeJson(doc, payStr);
 
     // Verifica se houve erro no parsing
     if (error) {
@@ -351,7 +457,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
 
     String id = doc["actuatorId"];
     String cmd = doc["command"];
-    callActuator(id, cmd);
+    manager->callActuator(id, cmd);
   }
   else{
     Serial.print("Tópico desconhecido: ");
@@ -359,30 +465,31 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
   }
 }
 
-Sensor *sensors[10];
-int lastSenIndex = 0;
-Actuator *actuators[10];
-int lastActIndex = 0;
+DevicesManager* manager;
 
 void setup(){
+  Serial.begin(115200);
+  //As conexões WiFi e MQTT são estabelecidas
   initWiFi();
   initMQTT();
   VerificaConexoesWiFIEMQTT();
+  // O cliente NTP para o timestamp é iniciado
   timeClient.begin();
-
-  // GMT 1 = 3600, GMT -1 = -3600
-  timeClient.setTimeOffset(-3*3600);  
+  timeClient.setTimeOffset(-3*3600); // GMT 1 = 3600, GMT -1 = -3600
 
   Serial.println("Esp32 Mac Adress: " + WiFi.macAddress());
+
+  // O gerenciador de dispositivos é instanciado
+  manager = new DevicesManager();
 }
 
 void loop(){
+  // Caso a conexão for perdida, ela é reestabelecida
   VerificaConexoesWiFIEMQTT();
-  for(int i=0; i<lastSenIndex; i++){
-    if(sensors[i] != NULL && sensors[i]->isActive()){
-      //Se o sensor estiver ativo, ele opera medindo valores e, se for o caso, os publica
-      sensors[i]->operate();
-    }
-  }
+
+  // A cada ciclo do loop, os sensores medem valores e os publicam - se for o caso
+  manager->operateAllSensors();
+
+  // A rotina MQTT é executada
   MQTT.loop();
 }

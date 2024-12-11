@@ -22,7 +22,7 @@ String dayStamp;
 String timeStamp;
 
 //PINO ANALÓGICO UTILIZADO PELO DHT11
-const int DHT11_1 = 4; 
+const int dhtPin = 4; 
 
 const int humMeasurements = 100, tempMeasurements = 100;
 
@@ -37,6 +37,9 @@ PubSubClient MQTT(espClient); // Instancia o Cliente MQTT passando o objeto espC
 
 #define SENSORDHT11 1
 #define ACTUATORLED 2 
+#define DHTTYPE DHT11
+
+DHT dht(dhtPin, DHTTYPE);
 
 void initWiFi(void){
   delay(10);
@@ -50,14 +53,24 @@ void initMQTT(void){
   MQTT.setCallback(mqttCallback);            //atribui função de callback (função chamada quando qualquer informação de um dos tópicos subescritos chega)
 }
 
+void getSensorsTopic(char* sensorsTopic, int size){
+  String sensorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/sensors/";
+  sensorsTopicStr.toCharArray(sensorsTopic, size);
+}
+
+void getActuatorsTopic(char* actuatorsTopic, int size){
+  String actuatorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators/";
+  actuatorsTopicStr.toCharArray(actuatorsTopic, size);
+}
+
 void reconnectMQTT(void){
   while (!MQTT.connected()){
     Serial.print("* Tentando se conectar ao Broker MQTT: ");
     Serial.println(BROKER_MQTT);
     if (MQTT.connect(ID_MQTT)){
-      Serial.println("Conectado com sucesso ao broker MQTT!");
-      char[] sensorsTopic = "/esp32/" + WiFi.macAddress() + "/sensors/";
-      char[] actuatorsTopic = "/esp32/" + WiFi.macAddress() + "/actuators/";
+      char sensorsTopic[256], actuatorsTopic[256];
+      getSensorsTopic(sensorsTopic, sizeof(sensorsTopic));
+      getActuatorsTopic(actuatorsTopic, sizeof(actuatorsTopic));
       MQTT.subscribe(sensorsTopic);
       MQTT.subscribe(actuatorsTopic);
     }
@@ -84,7 +97,7 @@ void reconnectWiFi(void){
 
   Serial.println();
   Serial.print("Conectado com sucesso na rede ");
-  Serial.println(SSID);
+  Serial.println(ssid);
   Serial.print("IP obtido: ");
   Serial.println(WiFi.localIP());
 }
@@ -103,7 +116,7 @@ String getFmtDate(){
 }
 
 class Sensor{
-  private:
+  protected:
     String id;
     int type, active;
   public:
@@ -127,7 +140,7 @@ class Sensor{
 };
 
 class DHT11: public Sensor{
-  private:
+  protected:
     float temp, hum, curHum, curTemp;
     void setJson(JsonDocument json, String id, char valueStr[]){
       json["sensorId"] = id;
@@ -137,7 +150,7 @@ class DHT11: public Sensor{
   public:
     DHT11(int type, String id) : Sensor(type, id){}
     void operate(){
-      // A temperatura e humidade são obtidas a partir de uma média de 100 medidas
+      // A temperatura e umidade são obtidas a partir de uma média de 100 medidas
       float sumHum = 0, sumTemp = 0;
       for(int i=0; i<humMeasurements; i++){
         sumHum += dht.readHumidity(); 
@@ -153,13 +166,13 @@ class DHT11: public Sensor{
       }
       else if((int)curHum != (int)hum || (int)curTemp != (int)temp){
         //Se a temperatura e umidade medidas recentemente forem diferentes das últimas medidas, os novos valores são publicados nos respectivos tópicos MQTT
-        char tempStr[256], humStr[256];
+        char tempStr[256], humStr[256], topicStr[256];
         String topic = "/esp32/" + WiFi.macAddress() + "/sensors_data/";
+        topic.toCharArray(topicStr, sizeof(topicStr));
         JsonDocument tempJson, humJson;
         curHum = hum;
         curTemp = temp;
-        String toPrint = "Temperatura: " + temp + "°C\tHumidade" + hum + "%";
-        Serial.println(toPrint);
+        Serial.println("Temperatura: " + String(temp) + "°C\tHumidade" + String(hum) + "%");
 
         sprintf(tempStr, "%.2f°C", temp);
         sprintf(humStr, "%.2f%%", hum);
@@ -170,14 +183,14 @@ class DHT11: public Sensor{
         serializeJson(tempJson, tempStr);
         serializeJson(humJson, humStr);
 
-        MQTT.publish(topic, tempStr);
-        MQTT.publish(topic, humStr);
+        MQTT.publish(topicStr, tempStr);
+        MQTT.publish(topicStr, humStr);
       }
   }
 };
 
 class Actuator{
-  private:
+  protected:
     String id;
     int type, active;
   public:
@@ -192,7 +205,7 @@ class Actuator{
     void deactivate(){
       this->active = false;
     }
-    int getId(){
+    String getId(){
       return id;
     }
     int getType(){
@@ -202,8 +215,8 @@ class Actuator{
     void virtual turnOff() = 0;
 };
 
-class Led : Actuator{
-  private:
+class Led: public Actuator{
+  protected:
     int pin;
   public:
     Led(String id, int type, int pin) : Actuator(id, type){
@@ -234,7 +247,7 @@ class Led : Actuator{
 void addSensor(String id, int type){
   switch (type){
     case 1:
-      DHT11 *newDHT = new DHT11(type, id);
+      DHT11* newDHT = new DHT11(type, id);
       newDHT->activate();
       sensors[lastSenIndex++] = *newDHT;
       break;
@@ -261,11 +274,11 @@ void addActuator(String id, int type){
 void callActuator(String id, String command){
   for(int i=0; i<lastActIndex; i++){
     // Se for o atuador procurado e ele estiver ativo 
-    if(actuators[i] != null && actuators[i]->getId == id && actuators[i]->isActive()){
+    if(actuators[i] != NULL && actuators[i]->getId == id && actuators[i]->isActive()){
       switch(actuators[i]->getType()){
         // Se o atuador for um led, ele será acionado de acordo com o comando recebido pelo MQTT
         case 2:
-          switch(comando){
+          switch(command){
             case "turnOn":
               actuators[i]->turnOn();
               break;
@@ -290,7 +303,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
 
   String topic = top;
   
-  if(topic.contains("sensors")){
+  if(topic.indexOf("sensors") != -1){
     // Nesse caso, se trata da entrada de um sensor pelo usuário
     JsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, String(payload));
@@ -307,7 +320,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     int type = doc["type"];
     addSensor(sensorId, type); 
   }
-  else if(topic.contains("actuators")){
+  else if(topic.indexOf("actuators") != -1){
     // Nesse caso, se trata da entrada de um atuador pelo usuário
     JsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, String(payload));
@@ -349,7 +362,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
 Sensor *sensors[10];
 int lastSenIndex = 0;
 Actuator *actuators[10];
-int lastActIndex = 10;
+int lastActIndex = 0;
 
 void setup(){
   initWiFi();

@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": false,
-      "cwd": "/home/bruno/Desktop/shc_esp/smh_esp/esp32_code",
-      "program": "/home/bruno/Desktop/shc_esp/smh_esp/esp32_code/build/Debug/outDebug",
+      "cwd": "/home/bruno/Desktop/shc_esp/smh_esp",
+      "program": "/home/bruno/Desktop/shc_esp/smh_esp/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

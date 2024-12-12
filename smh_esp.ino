@@ -12,7 +12,7 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
-const char* ssid = "Bruno";
+const char* ssid = "BUBU";
 const char* password = "brunominhavida1";
 
 // Define NTP Client to get time
@@ -32,7 +32,10 @@ const int humMeasurements = 100, tempMeasurements = 100;
 float hum, temp, actual_hum, actual_temp; 
 
 #define ID_MQTT "cbc1a155-0db1-446a-9a10-8304c3968412"
-const char* BROKER_MQTT = "test.mosquitto.org"; // URL do broker
+//URL do broker
+//const char* BROKER_MQTT = "test.mosquitto.org"; 
+const char* BROKER_MQTT = "broker.emqx.io"; 
+//const char* BROKER_MQTT = "broker.hivemq.com";
 const int BROKER_PORT = 1883;
 
 WiFiClient espClient;
@@ -62,25 +65,54 @@ void initMQTT(void){
 }
 
 void getSensorsTopic(char* sensorsTopic, int size){
-  String sensorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/sensors/";
+  String sensorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/sensors_added/";
   sensorsTopicStr.toCharArray(sensorsTopic, size);
+  Serial.println("Subscribed to " + sensorsTopicStr);
+}
+
+void getSenRemTopic(char* sensorsTopic, int size){
+  String sensorsRemTopStr = "/esp32/" + String(WiFi.macAddress()) + "/sensors_rem/";
+  sensorsRemTopStr.toCharArray(sensorsTopic, size);
+  Serial.println("Subscribed to " + sensorsRemTopStr);
 }
 
 void getActuatorsTopic(char* actuatorsTopic, int size){
-  String actuatorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators/";
+  String actuatorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_added/";
   actuatorsTopicStr.toCharArray(actuatorsTopic, size);
+  Serial.println("Subscribed to " + actuatorsTopicStr);
 }
+
+void getActDataTopic(char* actuatorsTopic, int size){
+  String actDataTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_data/";
+  actDataTopicStr.toCharArray(actuatorsTopic, size);
+  Serial.println("Subscribed to " + actDataTopicStr);
+}
+
+void getActRemTopic(char* actuatorsTopic, int size){
+  String actRemTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_removed/";
+  actRemTopicStr.toCharArray(actuatorsTopic, size);
+  Serial.println("Subscribed to " + actRemTopicStr);
+}
+
 
 void reconnectMQTT(void){
   while (!MQTT.connected()){
     Serial.print("* Tentando se conectar ao Broker MQTT: ");
     Serial.println(BROKER_MQTT);
     if (MQTT.connect(ID_MQTT)){
-      char sensorsTopic[256], actuatorsTopic[256];
+      // São feitas as subscrições nos tópicos de sensores e atuadores adicionados e removidos e de dados de atuadores (usados para a esp acionar os atuadores)
+      char sensorsTopic[256], actuatorsTopic[256], senRemTopic[256], actDataTopic[256], actRemTopic[256];
       getSensorsTopic(sensorsTopic, sizeof(sensorsTopic));
       getActuatorsTopic(actuatorsTopic, sizeof(actuatorsTopic));
+      getSenRemTopic(senRemTopic, sizeof(senRemTopic));
+      getActDataTopic(actDataTopic, sizeof(actDataTopic));
+      getActRemTopic(actRemTopic, sizeof(actRemTopic));
       MQTT.subscribe(sensorsTopic);
       MQTT.subscribe(actuatorsTopic);
+      MQTT.subscribe(senRemTopic);
+      MQTT.subscribe(actDataTopic);
+      MQTT.subscribe(actRemTopic);
+      Serial.println("Todas as subscricoes foram feitas!");
     }
     else{
       Serial.println("Falha ao reconectar no broker.");
@@ -374,7 +406,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
 
   String topic = String(top);
   
-  if(topic.indexOf("sensorsAdded") != -1){
+  if(topic.indexOf("sensors_added") != -1){
     // Nesse caso, se trata da entrada de um sensor pelo usuário
     StaticJsonDocument<256> doc;
     // O conteúdo da mensagem é convertido de array de bytes para uma string
@@ -393,9 +425,11 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     // Os dados são decodificados e o sensor requisitado passa a ser operado no loop
     String id = doc["sensorId"];
     int type = doc["type"];
+    Serial.println("Mensagem recebida no topico sensors_added !");
+    Serial.println("Sensor do tipo " + String(type) + " , de id " + id);
     manager->addSensor(id, type); 
   }
-  else if(topic.indexOf("actuatorsAdded") != -1){
+  else if(topic.indexOf("actuators_added") != -1){
     // Nesse caso, se trata da entrada de um atuador pelo usuário
     StaticJsonDocument<256> doc;
 
@@ -414,6 +448,8 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     // Os dados são decodificados e o atuador passa a poder executar comandos do usuário
     String id = doc["actuatorId"];
     int type = doc["type"];
+    Serial.println("Mensagem recebida no topico actuators_added !");
+    Serial.println("Atuador do tipo " + String(type) + " , de id " + id);
     manager->addActuator(id, type);
   }
   else if(topic.indexOf("sensors_deleted")){
@@ -426,6 +462,8 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     DeserializationError error = deserializeJson(doc, payStr);
 
     String id = doc["sensorId"];
+    Serial.println("Mensagem recebida no topico sensors_deleted !");
+    Serial.println("Sensor de id " + id);
     manager->deleteSensor(id);
   }
   else if(topic.indexOf("actuators_deleted")){
@@ -437,9 +475,11 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     DeserializationError error = deserializeJson(doc, payStr);
 
     String id = doc["actuatorId"];
+    Serial.println("Mensagem recebida no topico actuators_deleted !");
+    Serial.println("Atuador de id " + id);
     manager->deleteActuator(id);
   }
-  else if(topic.indexOf("actuator_data") != -1){
+  else if(topic.indexOf("actuators_data") != -1){
     // Nesse caso, se trata de um comando sobre o atuador pelo usuário
     StaticJsonDocument<256> doc;
 
@@ -457,6 +497,8 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
 
     String id = doc["actuatorId"];
     String cmd = doc["command"];
+    Serial.println("Mensagem recebida no topico actuators_data !");
+    Serial.println("Atuador de id " + id + ", comando: " + cmd);
     manager->callActuator(id, cmd);
   }
   else{

@@ -2,8 +2,23 @@
     "version": 4,
     "configurations": [
         {
+            "name": "linux-gcc-x64",
+            "compilerPath": "/usr/bin/gcc",
+            "compilerArgs": [
+                ""
+            ],
+            "intelliSenseMode": "linux-gcc-x64",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "forcedInclude": [],
+            "cStandard": "${default}",
+            "cppStandard": "${default}",
+            "defines": []
+        },
+        {
             "name": "Arduino",
-            "compilerPath": "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\bin\\xtensa-esp32-elf-g++",
+            "compilerPath": "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/bin/xtensa-esp32-elf-g++",
             "compilerArgs": [
                 "-MMD",
                 "-w",
@@ -12,27 +27,27 @@
             ],
             "intelliSenseMode": "gcc-x64",
             "includePath": [
-                "C:\\Users\\1462639\\Desktop\\smh_esp\\esp32_code",
-                "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\esp32-arduino-libs\\idf-release_v5.1-632e0c2a\\esp32\\dio_qspi\\include",
-                "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.0.7\\cores\\esp32",
-                "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.0.7\\variants\\doitESP32devkitV1",
-                "C:\\Users\\1462639\\Documents\\Arduino\\libraries\\DHT_sensor_library",
-                "C:\\Users\\1462639\\Documents\\Arduino\\libraries\\ArduinoJson\\src",
-                "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.0.7\\libraries\\WiFi\\src",
-                "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.0.7\\libraries\\Network\\src",
-                "C:\\Users\\1462639\\Documents\\Arduino\\libraries\\PubSubClient\\src",
-                "C:\\Users\\1462639\\Documents\\Arduino\\libraries\\NTPClient",
-                "C:\\Users\\1462639\\Documents\\Arduino\\libraries\\Adafruit_Unified_Sensor",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\xtensa-esp32-elf\\include\\c++\\12.2.0",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\xtensa-esp32-elf\\include\\c++\\12.2.0\\xtensa-esp32-elf",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\xtensa-esp32-elf\\include\\c++\\12.2.0\\backward",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\lib\\gcc\\xtensa-esp32-elf\\12.2.0\\include",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\lib\\gcc\\xtensa-esp32-elf\\12.2.0\\include-fixed",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\xtensa-esp32-elf\\sys-include",
-                "c:\\users\\1462639\\appdata\\local\\arduino15\\packages\\esp32\\tools\\esp-x32\\2302\\xtensa-esp32-elf\\include"
+                "/home/bruno/Desktop/shc_esp/smh_esp",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp32-arduino-libs/idf-release_v5.1-632e0c2a/esp32/dio_qspi/include",
+                "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/cores/esp32",
+                "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/variants/doitESP32devkitV1",
+                "/home/bruno/Arduino/libraries/ArduinoJson/src",
+                "/home/bruno/Arduino/libraries/DHT_sensor_library",
+                "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/libraries/WiFi/src",
+                "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/libraries/Network/src",
+                "/home/bruno/Arduino/libraries/PubSubClient/src",
+                "/home/bruno/Arduino/libraries/NTPClient",
+                "/home/bruno/Arduino/libraries/Adafruit_Unified_Sensor",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/include/c++/12.2.0",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/include/c++/12.2.0/xtensa-esp32-elf",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/include/c++/12.2.0/backward",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/lib/gcc/xtensa-esp32-elf/12.2.0/include",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/lib/gcc/xtensa-esp32-elf/12.2.0/include-fixed",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/sys-include",
+                "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/include"
             ],
             "forcedInclude": [
-                "C:\\Users\\1462639\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\3.0.7\\cores\\esp32\\Arduino.h"
+                "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/cores/esp32/Arduino.h"
             ],
             "cStandard": "c11",
             "cppStandard": "c++11",
@@ -44,7 +59,7 @@
                 "ARDUINO_BOARD=\"ESP32_DEV\"",
                 "ARDUINO_VARIANT=\"doitESP32devkitV1\"",
                 "ARDUINO_PARTITION_default",
-                "ARDUINO_HOST_OS=\"windows\"",
+                "ARDUINO_HOST_OS=\"linux\"",
                 "ARDUINO_FQBN=\"esp32:esp32:esp32doit-devkit-v1:FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=none\"",
                 "ESP32=ESP32",
                 "CORE_DEBUG_LEVEL=0",

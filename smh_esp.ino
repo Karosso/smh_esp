@@ -9,15 +9,11 @@
 #include <PubSubClient.h>
 
 // Para o timestamp
-#include <NTPClient.h>
-#include <WiFiUdp.h>
+#include <time.h>                    // for time() ctime()
+
 
 const char* ssid = "BUBU";
 const char* password = "brunominhavida1";
-
-// Define NTP Client to get time
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
 
 // Variables to save date and time
 String formattedDate;
@@ -40,6 +36,14 @@ const int BROKER_PORT = 1883;
 
 WiFiClient espClient;
 PubSubClient MQTT(espClient); 
+
+/* Configuration of NTP */
+// choose the best fitting NTP server pool for your country
+#define MY_NTP_SERVER "pool.ntp.org"
+
+// choose your time zone from this list
+// https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+#define MY_TZ "CET-1CEST,M3.5.0/02,M10.5.0/03"
 
 #define SENSORDHT11 1
 #define ACTUATORLED 2 
@@ -67,31 +71,26 @@ void initMQTT(void){
 void getSensorsTopic(char* sensorsTopic, int size){
   String sensorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/sensors_added/";
   sensorsTopicStr.toCharArray(sensorsTopic, size);
-  Serial.println("Subscribed to " + sensorsTopicStr);
 }
 
 void getSenRemTopic(char* sensorsTopic, int size){
   String sensorsRemTopStr = "/esp32/" + String(WiFi.macAddress()) + "/sensors_rem/";
   sensorsRemTopStr.toCharArray(sensorsTopic, size);
-  Serial.println("Subscribed to " + sensorsRemTopStr);
 }
 
 void getActuatorsTopic(char* actuatorsTopic, int size){
   String actuatorsTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_added/";
   actuatorsTopicStr.toCharArray(actuatorsTopic, size);
-  Serial.println("Subscribed to " + actuatorsTopicStr);
 }
 
 void getActDataTopic(char* actuatorsTopic, int size){
   String actDataTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_data/";
   actDataTopicStr.toCharArray(actuatorsTopic, size);
-  Serial.println("Subscribed to " + actDataTopicStr);
 }
 
 void getActRemTopic(char* actuatorsTopic, int size){
   String actRemTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_removed/";
   actRemTopicStr.toCharArray(actuatorsTopic, size);
-  Serial.println("Subscribed to " + actRemTopicStr);
 }
 
 
@@ -107,12 +106,26 @@ void reconnectMQTT(void){
       getSenRemTopic(senRemTopic, sizeof(senRemTopic));
       getActDataTopic(actDataTopic, sizeof(actDataTopic));
       getActRemTopic(actRemTopic, sizeof(actRemTopic));
-      MQTT.subscribe(sensorsTopic);
-      MQTT.subscribe(actuatorsTopic);
-      MQTT.subscribe(senRemTopic);
-      MQTT.subscribe(actDataTopic);
-      MQTT.subscribe(actRemTopic);
-      Serial.println("Todas as subscricoes foram feitas!");
+      if(MQTT.subscribe(sensorsTopic)){
+        Serial.println("Subscribed to " + String(sensorsTopic));
+      }
+      delay(100);
+      if(MQTT.subscribe(actuatorsTopic)){
+        Serial.println("Subscribed to " + String(actuatorsTopic));
+      }
+      delay(100);
+      if(MQTT.subscribe(senRemTopic)){
+        Serial.println("Subscribed to " + String(senRemTopic));
+      }
+      delay(100);
+      if(MQTT.subscribe(actDataTopic)){
+        Serial.println("Subscribed to " + String(actDataTopic));
+      }
+      delay(100);
+      if(MQTT.subscribe(actRemTopic)){
+        Serial.println("Subscribed to " + String(actRemTopic));
+      }
+      delay(100);
     }
     else{
       Serial.println("Falha ao reconectar no broker.");
@@ -148,11 +161,25 @@ void VerificaConexoesWiFIEMQTT(void)
   reconnectWiFi(); //se não há conexão com o WiFI, a conexão é refeita
 }
 
-String getFmtDate(){
-  while(!timeClient.update()) {
-    timeClient.forceUpdate();
-  }
-  return timeClient.getFormattedTime();
+String getFmtDate() {
+  time_t now;
+  struct tm timeinfo;
+
+  // Obter o horário atual e preencher a estrutura tm
+  time(&now);
+  gmtime_r(&now, &timeinfo); // Converter para horário UTC
+
+  // Criar o timestamp no formato ISO 8601
+  char timestamp[25]; // Tamanho suficiente para "YYYY-MM-DDTHH:MM:SSZ"
+  snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+           timeinfo.tm_year + 1900,  // Ano desde 1900
+           timeinfo.tm_mon + 1,      // Mês (Janeiro = 0)
+           timeinfo.tm_mday,         // Dia do mês
+           timeinfo.tm_hour,         // Hora (UTC)
+           timeinfo.tm_min,          // Minuto
+           timeinfo.tm_sec);         // Segundo
+
+  return String(timestamp);
 }
 
 class Sensor{
@@ -187,27 +214,30 @@ class Sensor{
 
 class DHTSensor: public Sensor{
   protected:
-    float temp, hum, curHum, curTemp;
-    void setJson(StaticJsonDocument<256>& json, String id, char valueStr[]){
-      json["sensorId"] = id;
-      json["value"] = valueStr;
-      json["timestamp"] = getFmtDate();
-    }
+    float curHum, curTemp;
   public:
-    DHTSensor(int type, String id) : Sensor(type, id){}
+    DHTSensor(int type, String id) : Sensor(type, id){
+      curHum = curTemp = 0;
+      // Delay para inicialização do dht
+      delay(200);
+    }
     void operate(){
       // A temperatura e umidade são obtidas a partir de uma média de 100 medidas
-      float sumHum = 0, sumTemp = 0;
+      float hum = 0, temp = 0; 
       for(int i=0; i<humMeasurements; i++){
-        sumHum += dht.readHumidity(); 
+        hum += dht.readHumidity();
+        // Delay para estabilizar a medição
+        delay(10); 
       }
       for(int i=0; i<tempMeasurements; i++){
-        sumTemp += dht.readTemperature();
+        temp += dht.readTemperature();
+        // Delay para estabilizar a medição
+        delay(10); 
       }
-      hum = sumHum / humMeasurements;
-      temp = sumTemp / tempMeasurements;
+      hum /= humMeasurements;
+      temp /= tempMeasurements;
       if (isnan(hum) || isnan(temp)) {
-        Serial.println("Failed to read from DHT sensor!");
+        Serial.println("Falha ao ler o sensor DHT!");
         return;
       }
       else if((int)curHum != (int)hum || (int)curTemp != (int)temp){
@@ -215,24 +245,42 @@ class DHTSensor: public Sensor{
         char tempStr[256], humStr[256], topicStr[256];
         String topic = "/esp32/" + WiFi.macAddress() + "/sensors_data/";
         topic.toCharArray(topicStr, sizeof(topicStr));
-        StaticJsonDocument<256> tempJson, humJson;
+        const int capacity = JSON_OBJECT_SIZE(3);
+        StaticJsonDocument<capacity> tempJson, humJson;
         curHum = hum;
         curTemp = temp;
-        Serial.println("Temperatura: " + String(temp) + "°C\tHumidade" + String(hum) + "%");
+        Serial.println("Temperatura: " + String(temp) + "°C\tUmidade: " + String(hum) + "%");
 
-        sprintf(tempStr, "%.2f°C", temp);
-        sprintf(humStr, "%.2f%%", hum);
+        sprintf(tempStr, "%.2f", temp);
+        sprintf(humStr, "%.2f", hum);
 
-        setJson(tempJson, this->id, tempStr);
-        setJson(humJson, this->id, humStr);
+        tempJson["sensorId"] = id;
+        tempJson["value"] = tempStr;
+        Serial.println("Teste");
+        tempJson["timestamp"] = getFmtDate();
+        humJson["sensorId"] = "2"; // O sensor de umidade é tratado como um sensor diferente do de temperatura
+        humJson["value"] = humStr;
+        humJson["timestamp"] = getFmtDate();
 
         serializeJson(tempJson, tempStr);
         serializeJson(humJson, humStr);
 
-        MQTT.publish(topicStr, tempStr);
-        MQTT.publish(topicStr, humStr);
+        if(MQTT.publish(topicStr, tempStr)){
+          delay(100);
+          Serial.println("Temperatura publicada em " + String(topicStr));
+        }
+        else{
+          Serial.println("Temperatura não publicada");
+        }
+        if(MQTT.publish(topicStr, humStr)){
+          delay(100);
+          Serial.println("Umidade publicada em " + String(topicStr));
+        }
+        else{
+          Serial.println("Umidade não publicada");
+        }
       }
-  }
+    }
 };
 
 class Actuator{
@@ -401,6 +449,12 @@ class DevicesManager{
     }
 };
 
+void toCharArray(char* charArray, byte* byteArray, int size){
+  for(int i=0; i<size; i++){
+    charArray[i] = (char)byteArray[i];
+  }
+}
+
 // função callback usada para operar sensores - na função loop - ou acionar atuadores
 void mqttCallback(char* top, byte* payload, unsigned int length){
 
@@ -411,7 +465,11 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     StaticJsonDocument<256> doc;
     // O conteúdo da mensagem é convertido de array de bytes para uma string
     char payStr[256];
-    memcpy(payStr, payload, sizeof(payload));
+    toCharArray(payStr, payload, length);
+
+    // Debug
+    Serial.println("Conteúdo recebido em " + topic); 
+    Serial.println(payStr);
 
     DeserializationError error = deserializeJson(doc, payStr);
 
@@ -426,7 +484,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     String id = doc["sensorId"];
     int type = doc["type"];
     Serial.println("Mensagem recebida no topico sensors_added !");
-    Serial.println("Sensor do tipo " + String(type) + " , de id " + id);
+    Serial.println("Sensor do tipo " + String(type) + ", de id " + id);
     manager->addSensor(id, type); 
   }
   else if(topic.indexOf("actuators_added") != -1){
@@ -434,7 +492,11 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     StaticJsonDocument<256> doc;
 
     char payStr[256];
-    memcpy(payStr, payload, sizeof(payload));
+    toCharArray(payStr, payload, length);
+
+    // Debug
+    Serial.println("Conteúdo recebido em " + topic); 
+    Serial.println(payStr);
 
     DeserializationError error = deserializeJson(doc, payStr);
 
@@ -449,15 +511,19 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     String id = doc["actuatorId"];
     int type = doc["type"];
     Serial.println("Mensagem recebida no topico actuators_added !");
-    Serial.println("Atuador do tipo " + String(type) + " , de id " + id);
+    Serial.println("Atuador do tipo " + String(type) + ", de id " + id);
     manager->addActuator(id, type);
   }
-  else if(topic.indexOf("sensors_deleted")){
+  else if(topic.indexOf("sensors_deleted") != -1){
 
     StaticJsonDocument<256> doc;
     // O conteúdo da mensagem é convertido de array de bytes para uma string
     char payStr[256];
-    memcpy(payStr, payload, sizeof(payload));
+    toCharArray(payStr, payload, length);
+
+    // Debug
+    Serial.println("Conteúdo recebido em " + topic); 
+    Serial.println(payStr);
 
     DeserializationError error = deserializeJson(doc, payStr);
 
@@ -466,11 +532,15 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     Serial.println("Sensor de id " + id);
     manager->deleteSensor(id);
   }
-  else if(topic.indexOf("actuators_deleted")){
+  else if(topic.indexOf("actuators_deleted") != -1){
     StaticJsonDocument<256> doc;
     // O conteúdo da mensagem é convertido de array de bytes para uma string
     char payStr[256];
-    memcpy(payStr, payload, sizeof(payload));
+    toCharArray(payStr, payload, length);
+
+    // Debug
+    Serial.println("Conteúdo recebido em " + topic); 
+    Serial.println(payStr);
 
     DeserializationError error = deserializeJson(doc, payStr);
 
@@ -484,7 +554,11 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     StaticJsonDocument<256> doc;
 
     char payStr[256];
-    memcpy(payStr, payload, sizeof(payload));
+    toCharArray(payStr, payload, length);
+
+    // Debug
+    Serial.println("Conteúdo recebido em " + topic); 
+    Serial.println(payStr);
 
     DeserializationError error = deserializeJson(doc, payStr);
 
@@ -515,11 +589,14 @@ void setup(){
   initWiFi();
   initMQTT();
   VerificaConexoesWiFIEMQTT();
-  // O cliente NTP para o timestamp é iniciado
-  timeClient.begin();
-  timeClient.setTimeOffset(-3*3600); // GMT 1 = 3600, GMT -1 = -3600
+
+  configTime(0, 0, MY_NTP_SERVER);  // 0, 0 because we will use TZ in the next line
+  setenv("TZ", MY_TZ, 1);            // Set environment variable with your time zone
+  tzset();
 
   Serial.println("Esp32 Mac Adress: " + WiFi.macAddress());
+
+  delay(200);
 
   // O gerenciador de dispositivos é instanciado
   manager = new DevicesManager();

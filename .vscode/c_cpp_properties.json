@@ -36,7 +36,6 @@
                 "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/libraries/WiFi/src",
                 "/home/bruno/.arduino15/packages/esp32/hardware/esp32/3.0.7/libraries/Network/src",
                 "/home/bruno/Arduino/libraries/PubSubClient/src",
-                "/home/bruno/Arduino/libraries/NTPClient",
                 "/home/bruno/Arduino/libraries/Adafruit_Unified_Sensor",
                 "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/include/c++/12.2.0",
                 "/home/bruno/.arduino15/packages/esp32/tools/esp-x32/2302/xtensa-esp32-elf/include/c++/12.2.0/xtensa-esp32-elf",

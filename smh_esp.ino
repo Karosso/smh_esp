@@ -4,6 +4,10 @@
 // Para o DHT11 - Sensor de temperatura e umidade
 #include <DHT.h>
 
+// Para o NTC - termistor
+#include <Thermistor.h>
+#include <NTC_Thermistor.h>
+
 // Para o protocolo MQTT
 #include <WiFi.h>
 #include <PubSubClient.h>
@@ -12,8 +16,11 @@
 #include <time.h>                    // for time() ctime()
 
 
-const char* ssid = "BUBU";
-const char* password = "brunominhavida1";
+const char* ssid = "Justweb2_wifi";
+const char* password = "IOx20=30?";
+
+// const char* ssid = "BUBU";
+// const char* password = "brunominhavida1";
 
 // Variables to save date and time
 String formattedDate;
@@ -22,6 +29,9 @@ String timeStamp;
 
 // Pino analógico do DHT11
 const int dhtPin = 4; 
+
+// Pino analógico do NTC
+const int ntcPin = 34; 
 
 const int humMeasurements = 100, tempMeasurements = 100;
 
@@ -50,6 +60,15 @@ PubSubClient MQTT(espClient);
 #define DHTTYPE DHT11
 
 DHT dht(dhtPin, DHTTYPE);
+
+#define REFERENCE_RESISTANCE    10000
+#define NOMINAL_RESISTANCE      10000
+#define NOMINAL_TEMPERATURE     25
+#define B_VALUE                 3950
+#define ESP32_ANALOG_RESOLUTION 4095
+
+NTC_Thermistor ntc(ntcPin, REFERENCE_RESISTANCE, NOMINAL_RESISTANCE, NOMINAL_TEMPERATURE, B_VALUE, ESP32_ANALOG_RESOLUTION);
+
 
 // Forward declarations
 class DevicesManager;  
@@ -89,7 +108,7 @@ void getActDataTopic(char* actuatorsTopic, int size){
 }
 
 void getActRemTopic(char* actuatorsTopic, int size){
-  String actRemTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_removed/";
+  String actRemTopicStr = "/esp32/" + String(WiFi.macAddress()) + "/actuators_rem/";
   actRemTopicStr.toCharArray(actuatorsTopic, size);
 }
 
@@ -254,13 +273,12 @@ class DHTSensor: public Sensor{
         sprintf(tempStr, "%.2f", temp);
         sprintf(humStr, "%.2f", hum);
 
-        tempJson["sensorId"] = id;
-        tempJson["value"] = tempStr;
-        Serial.println("Teste");
-        tempJson["timestamp"] = getFmtDate();
-        humJson["sensorId"] = "2"; // O sensor de umidade é tratado como um sensor diferente do de temperatura
-        humJson["value"] = humStr;
-        humJson["timestamp"] = getFmtDate();
+        tempJson["SensorId"] = id;
+        tempJson["Value"] = tempStr;
+        tempJson["Timestamp"] = getFmtDate();
+        humJson["SensorId"] = "2"; // O sensor de umidade é tratado como um sensor diferente do de temperatura
+        humJson["Value"] = humStr;
+        humJson["Timestamp"] = getFmtDate();
 
         serializeJson(tempJson, tempStr);
         serializeJson(humJson, humStr);
@@ -278,6 +296,66 @@ class DHTSensor: public Sensor{
         }
         else{
           Serial.println("Umidade não publicada");
+        }
+      }
+    }
+};
+
+class NTCSensor : public Sensor {
+  protected:
+    float curTemp;
+    NTC_Thermistor thermistor;
+
+  public:
+    NTCSensor(int type, String id) 
+      : Sensor(type, id), thermistor(ntcPin, REFERENCE_RESISTANCE, NOMINAL_RESISTANCE, NOMINAL_TEMPERATURE, B_VALUE, ESP32_ANALOG_RESOLUTION) {
+      this->curTemp = 0;
+      // Inicializa o sensor (se necessário)
+      delay(200);
+    }
+
+    void operate() {
+      // Faz uma média de leituras para obter a temperatura
+      float temp = 0;
+      const int tempMeasurements = 100;
+      for (int i = 0; i < tempMeasurements; i++) {
+        temp += thermistor.readCelsius();
+        delay(10); // Delay para estabilizar a medição
+      }
+      temp /= tempMeasurements;
+
+      if (isnan(temp)) {
+        Serial.println("Falha ao ler o sensor NTC!");
+        return;
+      }
+
+      // Verifica se a temperatura mudou
+      if ((int)curTemp != (int)temp) {
+        char tempStr[256], topicStr[256];
+        String topic = "/esp32/" + WiFi.macAddress() + "/sensors_data/";
+        topic.toCharArray(topicStr, sizeof(topicStr));
+
+        const int capacity = JSON_OBJECT_SIZE(3);
+        StaticJsonDocument<capacity> tempJson;
+
+        curTemp = temp;
+        Serial.println("Temperatura: " + String(temp) + "°C");
+
+        sprintf(tempStr, "%.2f", temp);
+
+        tempJson["SensorId"] = id;
+        tempJson["Value"] = tempStr;
+        tempJson["Timestamp"] = getFmtDate();
+
+        serializeJson(tempJson, tempStr);
+
+        if (MQTT.publish(topicStr, tempStr)) {
+          delay(100);
+          Serial.println("JSON: ");
+          Serial.println(tempStr);
+          Serial.println("Temperatura publicada em " + String(topicStr));
+        } else {
+          Serial.println("Temperatura não publicada");
         }
       }
     }
@@ -377,6 +455,28 @@ class DevicesManager{
           }
           break;
         }
+        case 20:{
+          if(lastSenIndex < 256){
+            //Se já existir um sensor do mesmo tipo, o procedimento é interrompido sem adicionar o sensor
+            for(int i=0; i<lastSenIndex; i++){
+              if(sensors[i]->getType() == type){
+                return;
+              }
+            }
+            switch(type){
+              case 20:{
+                Serial.println("Adicionando sensor NTC");
+                Sensor* ntc = new NTCSensor(type, id);
+                ntc->activate();
+                sensors[lastSenIndex++] = ntc;
+                break;
+              }
+              default:
+                break; 
+            } 
+          }
+          break;
+        }
         default:
           break;
       }
@@ -459,6 +559,8 @@ void toCharArray(char* charArray, byte* byteArray, int size){
 void mqttCallback(char* top, byte* payload, unsigned int length){
 
   String topic = String(top);
+
+  Serial.println("Topico " + topic); 
   
   if(topic.indexOf("sensors_added") != -1){
     // Nesse caso, se trata da entrada de um sensor pelo usuário
@@ -514,7 +616,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     Serial.println("Atuador do tipo " + String(type) + ", de id " + id);
     manager->addActuator(id, type);
   }
-  else if(topic.indexOf("sensors_deleted") != -1){
+  else if(topic.indexOf("sensors_rem") != -1){
 
     StaticJsonDocument<256> doc;
     // O conteúdo da mensagem é convertido de array de bytes para uma string
@@ -532,7 +634,7 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
     Serial.println("Sensor de id " + id);
     manager->deleteSensor(id);
   }
-  else if(topic.indexOf("actuators_deleted") != -1){
+  else if(topic.indexOf("actuators_rem") != -1){
     StaticJsonDocument<256> doc;
     // O conteúdo da mensagem é convertido de array de bytes para uma string
     char payStr[256];
@@ -569,8 +671,8 @@ void mqttCallback(char* top, byte* payload, unsigned int length){
       return;
     }
 
-    String id = doc["actuatorId"];
-    String cmd = doc["command"];
+    String id = doc["ActuatorId"];
+    String cmd = doc["Command"];
     Serial.println("Mensagem recebida no topico actuators_data !");
     Serial.println("Atuador de id " + id + ", comando: " + cmd);
     manager->callActuator(id, cmd);

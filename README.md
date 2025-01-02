@@ -1,5 +1,6 @@
-# Gerenciador de Sensores e Atuadores IoT com ESP32 - Smart Home Control
+# ESP32 - Smart Home Control
 
+## Visão Geral
 Este projeto implementa um sistema IoT flexível usando um microcontrolador ESP32, capaz de gerenciar múltiplos sensores e atuadores através de comunicação MQTT. O sistema faz parte de um ecossistema maior de automação residencial, integrando-se com um aplicativo mobile em Flutter e o backend em C# que possui um serviço em MQTT para gerenciar as mensagens trocadas entre o app e o esp, e o CRUD para gerenciar o a base de dados dos usuários.
 
 ## 🌐 Ecossistema do Projeto

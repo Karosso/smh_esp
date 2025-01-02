@@ -1,4 +1,4 @@
-# Gerenciador de Sensores e Atuadores IoT com ESP32
+# Gerenciador de Sensores e Atuadores IoT com ESP32 - Smart Home Control
 
 Este projeto implementa um sistema IoT flexível usando um microcontrolador ESP32, capaz de gerenciar múltiplos sensores e atuadores através de comunicação MQTT. O sistema faz parte de um ecossistema maior de automação residencial, integrando-se com um aplicativo mobile em Flutter e o backend em C# que possui um serviço em MQTT para gerenciar as mensagens trocadas entre o app e o esp, e o CRUD para gerenciar o a base de dados dos usuários.
 
@@ -200,7 +200,8 @@ Este projeto está licenciado sob a Licença MIT - veja abaixo o texto completo:
 ```
 MIT License
 
-Copyright (c) 2024 [Nome do Titular dos Direitos Autorais]
+Copyright (c) 2024 Oscar Dias (https://github.com/Karosso)
+Copyright (c) 2024 Bruno Reis (https://github.com/brunohreis)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
